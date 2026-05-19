@@ -4,10 +4,15 @@ import { WagmiAdapter } from '@reown/appkit-adapter-wagmi'
 import { mainnet, bsc, sepolia } from '@reown/appkit/networks'
 
 // ① Free Project ID from https://cloud.walletconnect.com
-export const projectId = 'YOUR_PROJECT_ID_HERE'
+export const projectId = '02e24ecc14c12e9d6cfe347f5ae22e78'
 
-// ② Your wallet — USDT payments land here
-export const MY_WALLET_ADDRESS = '0xYOUR_WALLET_ADDRESS_HERE'
+// ② Your receiving wallet addresses — one per chain
+//    These can be the same address or different ones
+//    (e.g. a different exchange deposit address per chain)
+export const MY_WALLETS = {
+  ethereum: '0x32D35Edd6B3A9De3D63b7592446B199ac5877d1D',  // receives ERC-20 USDT
+  bsc:      '0x32D35Edd6B3A9De3D63b7592446B199ac5877d1D',  // receives BEP-20 USDT
+}
 
 // ③ USDT contract addresses per chain
 //    USDT uses 6 decimals on ETH, 18 decimals on BSC
@@ -49,3 +54,4 @@ createAppKit({
   },
   features: { analytics: false, email: false, socials: [] },
 })
+  
