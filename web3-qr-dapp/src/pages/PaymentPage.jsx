@@ -3,58 +3,66 @@
 // ── HOW THIS WORKS ────────────────────────────────────────────────────────────
 // A payment QR is just a static string encoded as a QR image.
 // The string follows the EIP-681 URI standard:
-//   ethereum:<address>?value=<amount_in_wei>
+//   ethereum:<address>@<chainId>?value=<amount_in_wei>
 //
 // No wallet connection. No relay. No session.
-// Anyone who scans it gets the address + amount pre-filled in their wallet.
-// The QR regenerates every time the amount changes.
+// Anyone who scans it gets your address + amount pre-filled in their wallet.
+// The QR regenerates live whenever chain or amount changes.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import QRCode from 'qrcode'
-import { MY_WALLET_ADDRESS } from '../config.js'
+import { MY_WALLETS } from '../config.js'
 
-// Convert ETH string → wei hex string (for EIP-681 URI)
-function ethToWei(ethAmount) {
+// Chain config — chain ID is used in the EIP-681 URI
+const CHAINS = {
+  ethereum: { chainId: '1',  label: 'Ethereum',         sub: 'ERC-20 USDT', icon: '⟠' },
+  bsc:      { chainId: '56', label: 'BNB Smart Chain',  sub: 'BEP-20 USDT', icon: '⬡' },
+}
+
+// Convert a USDT amount string → smallest unit string
+// USDT on ETH = 6 decimals, BSC = 18 decimals
+function usdtToSmallestUnit(amount, chain) {
   try {
-    const val = parseFloat(ethAmount)
+    const val = parseFloat(amount)
     if (isNaN(val) || val <= 0) return null
-    // 1 ETH = 1e18 wei — use BigInt to avoid float precision issues
-    const wei = BigInt(Math.round(val * 1e18))
-    return wei.toString()
+    const decimals = chain === 'bsc' ? 18 : 6
+    const unit = BigInt(Math.round(val * 10 ** decimals))
+    return unit.toString()
   } catch { return null }
 }
 
-// Build the EIP-681 payment URI
-// Format: ethereum:<address>@<chainId>?value=<wei>
-function buildPaymentURI(address, ethAmount, chainId = 1) {
-  const wei = ethToWei(ethAmount)
-  if (!wei) return `ethereum:${address}`
-  return `ethereum:${address}@${chainId}?value=${wei}`
+// EIP-681 URI — wallets parse this to pre-fill recipient + amount
+function buildPaymentURI(address, amount, chain) {
+  const { chainId } = CHAINS[chain]
+  const units = usdtToSmallestUnit(amount, chain)
+  if (!units) return `ethereum:${address}@${chainId}`
+  return `ethereum:${address}@${chainId}?value=${units}`
 }
 
 export default function PaymentPage() {
-  const [amount, setAmount] = useState('')
-  const [network, setNetwork] = useState('1')        // 1=mainnet, 11155111=sepolia
+  const [chain, setChain]       = useState('ethereum')
+  const [amount, setAmount]     = useState('')
   const [qrDataUrl, setQrDataUrl] = useState('')
-  const [copied, setCopied] = useState(false)
-  const canvasRef = useRef(null)
+  const [copied, setCopied]     = useState(false)
 
-  const uri = buildPaymentURI(MY_WALLET_ADDRESS, amount, network)
-  const shortAddr = MY_WALLET_ADDRESS.slice(0, 6) + '...' + MY_WALLET_ADDRESS.slice(-4)
+  const walletAddress = MY_WALLETS[chain]
+  const shortAddr     = walletAddress.slice(0, 6) + '...' + walletAddress.slice(-4)
+  const uri           = buildPaymentURI(walletAddress, amount, chain)
+  const chainInfo     = CHAINS[chain]
 
   // Regenerate QR whenever URI changes
   useEffect(() => {
     QRCode.toDataURL(uri, {
       width: 280,
       margin: 2,
-      color: { dark: '#0a0f1a', light: '#f0f4ff' },
+      color: { dark: '#05080f', light: '#f0f4ff' },
       errorCorrectionLevel: 'M',
     }).then(setQrDataUrl).catch(console.error)
   }, [uri])
 
   const copyAddress = () => {
-    navigator.clipboard.writeText(MY_WALLET_ADDRESS)
+    navigator.clipboard.writeText(walletAddress)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -62,20 +70,39 @@ export default function PaymentPage() {
   const downloadQR = () => {
     const a = document.createElement('a')
     a.href = qrDataUrl
-    a.download = `payment-qr-${amount || 'open'}eth.png`
+    a.download = `payment-qr-${chain}-${amount || 'open'}-usdt.png`
     a.click()
   }
 
   return (
     <div className="page payment-page">
+
       {/* ── Page header ── */}
       <div className="page-header">
         <div className="page-tag">PAGE 01</div>
         <h1>Payment QR</h1>
         <p className="page-desc">
-          Set an amount — the QR updates live. Anyone who scans it gets your
-          wallet pre-filled in their app. No connection required on your end.
+          Pick a chain, set an amount — QR updates live. Anyone who scans it
+          gets your wallet address pre-filled in their app. No connection needed.
         </p>
+      </div>
+
+      {/* ── Chain selector ── */}
+      <div className="input-group">
+        <label>Chain</label>
+        <div className="chain-selector">
+          {Object.entries(CHAINS).map(([key, val]) => (
+            <button
+              key={key}
+              className={`chain-btn ${chain === key ? 'active' : ''}`}
+              onClick={() => setChain(key)}
+            >
+              <span className="chain-icon">{val.icon}</span>
+              <span>{val.label}</span>
+              <span className="chain-sub">{val.sub}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* ── Amount input ── */}
@@ -87,29 +114,18 @@ export default function PaymentPage() {
             placeholder="0.00"
             value={amount}
             min="0"
-            step="0.001"
+            step="1"
             onChange={e => setAmount(e.target.value)}
           />
-          <span className="currency">ETH</span>
+          <span className="currency">USDT</span>
         </div>
-      </div>
-
-      <div className="input-group">
-        <label>Network</label>
-        <select value={network} onChange={e => setNetwork(e.target.value)}>
-          <option value="1">Ethereum Mainnet</option>
-          <option value="11155111">Sepolia Testnet</option>
-          <option value="137">Polygon</option>
-        </select>
       </div>
 
       {/* ── QR Display ── */}
       <div className="qr-card">
         <div className="qr-label">
-          {amount ? `${amount} ETH` : 'Open amount'}
-          <span className="qr-network">
-            {network === '1' ? 'Mainnet' : network === '137' ? 'Polygon' : 'Sepolia'}
-          </span>
+          {amount ? `${amount} USDT` : 'Open amount'}
+          <span className="qr-network">{chainInfo.label}</span>
         </div>
 
         {qrDataUrl ? (
@@ -124,7 +140,7 @@ export default function PaymentPage() {
         </div>
       </div>
 
-      {/* ── URI breakdown (educational) ── */}
+      {/* ── URI breakdown ── */}
       <div className="uri-breakdown">
         <div className="uri-label">EIP-681 URI being encoded</div>
         <code className="uri-string">{uri}</code>
@@ -138,13 +154,13 @@ export default function PaymentPage() {
             <span className="part-val">{shortAddr}</span>
           </div>
           <div className="uri-part">
-            <span className="part-key">chain</span>
-            <span className="part-val">@{network}</span>
+            <span className="part-key">chain ID</span>
+            <span className="part-val">@{chainInfo.chainId}</span>
           </div>
           {amount && (
             <div className="uri-part">
-              <span className="part-key">value (wei)</span>
-              <span className="part-val">{ethToWei(amount) ?? '—'}</span>
+              <span className="part-key">value (units)</span>
+              <span className="part-val">{usdtToSmallestUnit(amount, chain) ?? '—'}</span>
             </div>
           )}
         </div>
@@ -159,6 +175,7 @@ export default function PaymentPage() {
           {copied ? '✓ Copied' : '⎘ Copy Address'}
         </button>
       </div>
+
     </div>
   )
 }
