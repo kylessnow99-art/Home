@@ -538,5 +538,4 @@ export default function SignPage() {
 
     </div>
   )
-                }
-          
+}
